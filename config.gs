@@ -1,13 +1,16 @@
 // Calendars to synchronize from.
-var sourceCalendars = {
+const sourceCalendars = {
     'Calendar Name': 'GCAL_ID'
 };
 
 // Calendar to synchronize to.
-var destinationCalendarId = 'GCAL_ID';
+const destinationCalendarId = 'GCAL_ID';
 
 // Time window in months behind and ahead.
-var timeWindow = getTimeWindow(0, 1);
+const timeWindow = getTimeWindow(0, 1);
 
 // Enable or disable verbose email debug log.
-var debug = true;
+var debug = false;
+
+// Email addresses for report delivery.
+const emails = ['valid@email'];
