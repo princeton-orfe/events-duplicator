@@ -2,21 +2,19 @@ if(debug) {
   let debugLogs = [];
 }
 
-// Function to determine if the event is an all-day event
+// Is the event an all-day event.
 function isAllDay(startTime, endTime) {
-  // Check if the event starts at 12:00 AM and ends at 12:00 AM the next day
+  // All day means it starts at 12:00 AM and ends at 12:00 AM the next day
   return startTime.getHours() === 0 && startTime.getMinutes() === 0 &&
          endTime.getHours() === 0 && endTime.getMinutes() === 0 &&
-         (endTime - startTime) === 24 * 60 * 60 * 1000; // Duration is exactly 1 day
+         (endTime - startTime) === 24 * 60 * 60 * 1000; // Exactly 1 day
 }
 
-// Function to determine if the event spans more than 36 hours
 function isMultiDay(startTime, endTime) {
-  // Check if the event lasts more than 36 hours or if it starts and ends on different days
-  return (endTime - startTime) > 36 * 60 * 60 * 1000 || startTime.toDateString() !== endTime.toDateString();
+  // Event spans more than 24 hours OR starts and ends on different days (but not exactly 24 hours).
+  return (endTime - startTime) > 24 * 60 * 60 * 1000 ||
+         (startTime.toDateString() !== endTime.toDateString() && (endTime - startTime) !== 24 * 60 * 60 * 1000);
 }
-
-
 
 function copyNewEventsFromMultipleCalendars() {
   debugLogs = []; // Clear previous debug logs at the start of each run
@@ -24,16 +22,13 @@ function copyNewEventsFromMultipleCalendars() {
 
   try {
     lock.tryLock(10000);
-
     if (!lock.hasLock()) {
       Logger.log('Another instance of the script is already running.');
       return;
     }
     
     var destinationCalendar = CalendarApp.getCalendarById(destinationCalendarId);
-
     var emailSummary = [];
-
     var eventSourcesMap = {};
 
     for (var calendarName in sourceCalendars) {
@@ -41,9 +36,11 @@ function copyNewEventsFromMultipleCalendars() {
       var sourceCalendar = CalendarApp.getCalendarById(sourceCalendarId);
 
       if (sourceCalendar) {
+
         var events = sourceCalendar.getEvents(timeWindow.start, timeWindow.end);
 
         events.forEach(function(event) {
+
           var uniqueIdentifier = createEventIdentifier(event); // Create unique identifier based on event properties
           var startTime = event.getStartTime();
           var endTime = event.getEndTime();
@@ -65,9 +62,11 @@ function copyNewEventsFromMultipleCalendars() {
           }
         });
       } else {
+        // Log a failure to retrieve a given calendar.
         emailSummary.push('Calendar not found: ' + calendarName);
       }
     }
+
 
 for (var uniqueIdentifier in eventSourcesMap) {
   var eventInfo = eventSourcesMap[uniqueIdentifier];
@@ -80,6 +79,7 @@ for (var uniqueIdentifier in eventSourcesMap) {
 
   // Check if the event is an all-day event (12:00 AM start and 12:00 AM end the next day)
   var isAllDayEvent = isAllDay(startTime, endTime);
+  // Check if the event is greater than 24-hours long.
   var isEventMultiDay = isMultiDay(startTime, endTime);
 
   var existingEvent = findEventBySourceIdentifier(destinationCalendar, uniqueIdentifier, timeWindow.start, timeWindow.end);
@@ -88,9 +88,9 @@ for (var uniqueIdentifier in eventSourcesMap) {
     var shouldUpdate = needsUpdate(existingEvent, eventInfo, title, startTime, endTime, description, location, uniqueIdentifier);
 
     if (debug) { // Add debug logs
-      debugLogs.push('Checking event: ' + title);
       debugLogs.push('Existing event details: Title: ' + existingEvent.getTitle() + ', Start: ' + existingEvent.getStartTime() + ', End: ' + existingEvent.getEndTime());
       debugLogs.push('New event details: Title: ' + title + ', Start: ' + startTime + ', End: ' + endTime);
+      debugLogs.push('Is Multi-Day Event: ' + isEventMultiDay);
       debugLogs.push('Needs update: ' + shouldUpdate + '\n');
     }
 
@@ -124,7 +124,7 @@ for (var uniqueIdentifier in eventSourcesMap) {
 }
 
 
-    sendSyncReport(emailSummary);
+    sendSyncReport(emailSummary, emails);
 
   } catch (e) {
     Logger.log('Error during execution: ' + e.message);
@@ -212,8 +212,8 @@ function needsUpdate(existingEvent, sourceEvent, title, startTime, endTime, desc
 
 
 // Update sendSyncReport function to include debug logs only if debug is enabled
-function sendSyncReport(summary) {
-  var email = 'bino@princeton.edu';  // Replace with the actual owner's email
+// Code.gs
+function sendSyncReport(summary, emails) {
   var subject = 'ORFE Calendar Sync Report';
   var body = summary.length > 0 ? summary.join('\n') : 'No events were synchronized.';
 
@@ -221,5 +221,8 @@ function sendSyncReport(summary) {
     body += '\n\n--- Debug Logs ---\n' + debugLogs.join('\n');
   }
 
-  MailApp.sendEmail(email, subject, body);
+  // Send the email to each address in the emails array
+  emails.forEach(function(email) {
+    MailApp.sendEmail(email, subject, body);
+  });
 }
