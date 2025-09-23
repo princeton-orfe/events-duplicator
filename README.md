@@ -1,4 +1,4 @@
-# ORFE Events Duplicator
+# Events Duplicator
 
 Takes one or more source calendars and duplicates the events to a target calendar.
 
