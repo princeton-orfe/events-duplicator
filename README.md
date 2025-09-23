@@ -1,4 +1,4 @@
-# Events Duplicator (Google Apps Script)
+# Events Duplicator
 
 > Keep a destination Google Calendar in sync with events from one or more source calendars. Designed for departmental/organizational roll‑up calendars.
 
