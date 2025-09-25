@@ -214,7 +214,7 @@ function needsUpdate(existingEvent, sourceEvent, title, startTime, endTime, desc
 // Update sendSyncReport function to include debug logs only if debug is enabled
 // Code.gs
 function sendSyncReport(summary, emails) {
-  var subject = 'ORFE Calendar Sync Report';
+  var subject = 'Calendar Sync Report';
   var body = summary.length > 0 ? summary.join('\n') : 'No events were synchronized.';
 
   if (debug) {
