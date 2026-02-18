@@ -188,6 +188,31 @@ A script lock prevents overlapping runs. If a sync is already in progress, subse
 - Run the script from the same account that owns/has access to all calendars
 - Re-authorize if permissions changed
 
+## Recovery Procedure
+
+If the destination calendar becomes inconsistent (orphaned events, duplicates, or sync failures), follow these steps:
+
+1. **Remove orphaned/duplicate events** from the destination calendar:
+   - Search for `Source Event ID:` in the destination calendar
+   - Delete events that no longer correspond to source events
+   - Or delete all synced events to start fresh (they will be recreated)
+
+2. **Check and reset triggers** in Apps Script:
+   - Go to **Triggers** (clock icon)
+   - Delete any stuck or erroring triggers
+   - Re-create the trigger for `copyNewEventsFromMultipleCalendars`
+
+3. **Re-run the sync manually**:
+   - Select `copyNewEventsFromMultipleCalendars` from the function dropdown
+   - Click **Run** and re-authorize if prompted
+
+4. **Redeploy the script** (if code is corrupted):
+   - Create a new Apps Script project
+   - Paste fresh copies of `config.gs` and `gs-events-duplicator.gs`
+   - Reconfigure and set up triggers
+
+Note: Source calendars are never modified. Recovery only affects the destination calendar and script configuration.
+
 ## Potential Enhancements
 
 - [ ] Garbage collection for orphaned events after time changes
