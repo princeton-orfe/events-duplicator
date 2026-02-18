@@ -1,124 +1,201 @@
 # Events Duplicator
 
-A Google Apps Script that takes one or more source Google Calendars and duplicates the events to a target calendar.
+Aggregate multiple Google Calendars into a single destination calendar with automatic de-duplication and synchronization.
 
-## What this does
-
-- Aggregates events from multiple Google Calendars into a single destination calendar
-- De‑duplicates identical events across sources and prefixes the title with the originating calendar name(s)
-- Preserves all‑day vs timed events accurately
-- Sends an email report after each run (optional verbose debug logs)
-- Intended to run on a time-based trigger for continuous synchronization
-
-External calendars are supported indirectly: subscribe to any ICS feed in Google Calendar first; that subscription appears as a normal calendar which can be used as a source.
-
-The logic lives in two files:
-
-- `config.gs` — your configuration (source calendars, destination calendar, time window, email settings)
-- `gs-events-duplicator.gs` — the synchronization logic
-
-Run the function `copyNewEventsFromMultipleCalendars` on a schedule.
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Calendar A  │     │  Calendar B  │     │  Calendar C  │
+└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+       │                    │                    │
+       └────────────────────┼────────────────────┘
+                            ▼
+                 ┌─────────────────────┐
+                 │  Events Duplicator  │
+                 │   (Apps Script)     │
+                 └──────────┬──────────┘
+                            ▼
+                 ┌─────────────────────┐
+                 │ Destination Calendar│
+                 │                     │
+                 │ "A, B: Shared Event"│
+                 │ "C: Unique Event"   │
+                 └─────────────────────┘
+```
 
 ## Features
 
-- Multiple sources to one destination
-- Title prefix shows source calendar(s), e.g. `Dept A, Dept B: Colloquium`
-- Event identity is tracked via a "Source Event ID" appended to the description
-- All‑day event handling (creates true all‑day entries)
-- Update-on-change for title/description/location within the sync window
-- Email summary after each run; optional detailed debug logs
-- Concurrency-safe with script-level locking
+- **Multi-source aggregation** — Combine any number of calendars into one
+- **Smart de-duplication** — Identical events across sources are merged with a combined prefix (e.g., `Dept A, Dept B: Colloquium`)
+- **All-day event support** — Correctly handles single-day and multi-day all-day events
+- **Live updates** — Changes to title, description, location, or time are synced automatically
+- **Email reports** — Summary after each run with optional verbose debug logs
+- **Concurrent-safe** — Script-level locking prevents race conditions
+- **External calendar support** — Works with ICS feeds subscribed through Google Calendar
 
-## How it works
+## Quick Start
 
-1. For each source calendar in `sourceCalendars`, fetch events within a configurable window (`getTimeWindow(monthsBack, monthsForward)`).
-2. Build a map of unique events across sources using an identifier: `title_without_prefix + startTime + endTime`.
-3. For each unique event:
-	- Title becomes `<Comma-separated source calendar names>: <Original title>`.
-	- Append `Source Event ID: <identifier>` to the description.
-	- Create or update the event in the destination calendar. All‑day events are created as true all‑day events.
-4. Email a run summary (and debug logs when enabled).
+1. **Create a new Apps Script project** at [script.google.com](https://script.google.com)
+2. **Add two files** and paste contents from this repo:
+   - `config.gs`
+   - `gs-events-duplicator.gs`
+3. **Configure** `config.gs` (see [Configuration](#configuration))
+4. **Run** `copyNewEventsFromMultipleCalendars` and authorize when prompted
+5. **Set up a trigger** for automatic sync (see [Scheduling](#scheduling))
 
-Known limitation: if a source event’s start or end time changes, the identifier changes (because it includes time). The script doesn’t delete the old destination event; it will create a new one with the new identifier. See "Limitations" below for details and cleanup tips.
+## Configuration
 
-## Setup
-
-1. Open Google Apps Script (https://script.google.com) and create a new Standalone project.
-2. Create two script files and paste the contents from this repo:
-	- `config.gs`
-	- `gs-events-duplicator.gs`
-3. In `config.gs`, configure:
+Edit `config.gs` with your calendar IDs and preferences:
 
 ```js
-// Calendars to synchronize from: { 'Human Readable Name': 'calendar_id@group.calendar.google.com' }
+// Source calendars: { 'Display Name': 'calendar_id' }
 const sourceCalendars = {
-  'Calendar Name': 'GCAL_ID'
+  'Work': 'work@group.calendar.google.com',
+  'Team': 'team_calendar@group.calendar.google.com',
+  'Holidays': 'en.usa#holiday@group.v.calendar.google.com'
 };
 
-// Calendar to synchronize to
-const destinationCalendarId = 'GCAL_ID';
+// Destination calendar ID
+const destinationCalendarId = 'combined@group.calendar.google.com';
 
-// Time window in months behind and ahead
-const timeWindow = getTimeWindow(0, 1); // e.g., past 0 months, next 1 month
+// Sync window: months back, months forward
+const timeWindow = getTimeWindow(0, 2);  // Now through 2 months ahead
 
-// Enable verbose email debug log
+// Debug mode (verbose email logs)
 var debug = false;
 
-// Email addresses for report delivery
+// Email recipients for sync reports
 const emails = ['you@example.com'];
 ```
 
-## First run and authorization
+### Finding Calendar IDs
 
-1. In the Apps Script editor, select the function `copyNewEventsFromMultipleCalendars` and click Run.
-2. Authorize the script when prompted. It needs access to:
-	- Calendar (read from sources, write to destination)
-	- Mail (send email summary)
-3. Check your inbox for the summary email and verify events were created/updated on the destination calendar.
+| Calendar Type | How to Find ID |
+|---------------|----------------|
+| **Your primary calendar** | Your email address (e.g., `you@gmail.com`) |
+| **Calendars you created** | Calendar Settings → Integrate calendar → Calendar ID |
+| **Shared calendars** | Calendar Settings → Integrate calendar → Calendar ID |
+| **Public/Holiday calendars** | Usually formatted as `en.usa#holiday@group.v.calendar.google.com` |
+| **ICS subscriptions** | After subscribing, find ID in Calendar Settings |
+
+> **Tip:** In Google Calendar, click the three dots next to a calendar → Settings → scroll to "Integrate calendar" to find the Calendar ID.
+
+## First Run
+
+1. In Apps Script, select `copyNewEventsFromMultipleCalendars` from the function dropdown
+2. Click **Run**
+3. Authorize the requested permissions:
+   - **Calendar** — Read from sources, write to destination
+   - **Mail** — Send sync reports
+4. Check your inbox for the summary email
+5. Verify events appear in your destination calendar
 
 ## Scheduling
 
-Set up a time-based trigger to keep the destination calendar up-to-date:
+Set up automatic synchronization with a time-based trigger:
 
-1. In the Apps Script editor, click Triggers.
-2. "Add Trigger":
-	- Choose function: `copyNewEventsFromMultipleCalendars`
-	- Event source: Time-driven
-	- Type of time-based trigger: e.g., Hour timer
-	- Select frequency: e.g., Every 2-4 hours
-3. Save.
+1. In Apps Script, click **Triggers** (clock icon in sidebar)
+2. Click **Add Trigger**
+3. Configure:
+   - Function: `copyNewEventsFromMultipleCalendars`
+   - Event source: **Time-driven**
+   - Type: **Hour timer**
+   - Interval: **Every 2 hours** (or your preference)
+4. Click **Save**
 
-## Configuration guidance
+## How It Works
 
-- Time window: Keep it as small as practical (e.g., 0 months back, 1–2 months forward) to reduce processing time and API calls.
-- Debug: Set `debug = true` temporarily when you need detailed diagnostics; your summary email will include a "Debug Logs" section.
-- Source names: The keys in `sourceCalendars` are used in the title prefix; keep them short and recognizable.
+1. **Fetch** — Retrieve events from each source calendar within the configured time window
+2. **Deduplicate** — Group identical events (same title + start + end time) across sources
+3. **Prefix** — Prepend source calendar names to titles (e.g., `Work, Team: Meeting`)
+4. **Track** — Append `Source Event ID: <identifier>` to descriptions for matching
+5. **Sync** — Create new events or update existing ones in the destination calendar
+6. **Report** — Email a summary of all changes
 
-## Behavior details
+## Configuration Tips
 
-- De-duplication across sources: Events are considered the same if their title (ignoring any existing prefix), start time, and end time are identical. When found in multiple sources, the destination title is prefixed with all matching source names, e.g., `Calendar A, Calendar B: Event`.
-- Identity tracking: The script appends `Source Event ID: <identifier>` to the destination event description and uses that to find/update existing events.
-- Updates: If an event with the same identifier exists, it updates title, description, location, and times (for non-all-day events) when mismatches are detected.
-- All‑day events: Correctly identified and created as true all‑day events (using `createAllDayEvent` / `setAllDayDate`).
-- Locking: A script lock prevents concurrent runs from overlapping.
+| Setting | Recommendation |
+|---------|----------------|
+| **Time window** | Keep minimal (e.g., 0–2 months) to reduce API calls and processing time |
+| **Debug mode** | Enable temporarily (`debug = true`) for diagnostics; adds verbose logs to emails |
+| **Source names** | Use short, recognizable names—they appear in event prefixes |
+| **Sync frequency** | Every 2–4 hours balances freshness with quota usage |
 
-## Limitations and tips
+## Behavior Details
 
-- Start/end time changes: Because the identifier includes start and end times, a time change in the source yields a new identifier. The script won’t match the old destination event and will create a new one. Clean up stale events in the destination by searching for the old title or for `Source Event ID:` in the description.
-- Outside window: Events moved outside the configured window won’t be touched by the script until they re-enter the window.
-- ICS latency: Subscribed ICS calendars may update with delays; the destination reflects whatever Google Calendar shows for the source at run time.
-- Quotas: Apps Script and CalendarApp have daily quotas. Keep windows/frequency reasonable, and reduce the number of source calendars if you hit limits.
+### Event Matching
+
+Events are considered identical if they share:
+- **Title** (ignoring any existing calendar prefix)
+- **Start time**
+- **End time**
+
+When the same event appears in multiple source calendars, the destination event title combines all sources: `Calendar A, Calendar B: Event Title`
+
+### Identity Tracking
+
+Each destination event includes `Source Event ID: <identifier>` in its description. This ID is used to:
+- Find existing events for updates
+- Avoid creating duplicates
+
+### What Gets Synced
+
+| Property | Synced? |
+|----------|---------|
+| Title | Yes (with prefix) |
+| Start/End time | Yes |
+| Description | Yes |
+| Location | Yes |
+| All-day status | Yes |
+| Attendees | No |
+| Reminders | No |
+| Color | No |
+
+### Concurrency
+
+A script lock prevents overlapping runs. If a sync is already in progress, subsequent triggers are skipped.
+
+## Known Limitations
+
+| Limitation | Impact | Workaround |
+|------------|--------|------------|
+| **Time changes** | If a source event's time changes, a new identifier is generated. The old destination event remains as an orphan. | Manually delete orphans by searching `Source Event ID:` in the destination calendar |
+| **Outside window** | Events moved outside the sync window aren't touched | Expand the window or wait for events to re-enter |
+| **ICS delays** | Subscribed ICS feeds may have propagation delays | Destination reflects what Google Calendar shows at sync time |
+| **API quotas** | Apps Script has daily limits | Reduce sources, narrow window, or decrease frequency |
 
 ## Troubleshooting
 
-- "Calendar not found" in email: The configured ID is wrong or not accessible to the account running the script. Recheck the Calendar ID and sharing.
-- Duplicate events: Often due to source time edits (see limitation above). Manually remove stale destination events. Consider reducing the sync window and/or cadence.
-- All‑day events appearing as timed: Ensure the source all‑day event truly starts at 12:00 AM and ends at 12:00 AM the next day.
-- No summary email: Verify `emails` in `config.gs` and that the account can send mail (MailApp quota not exhausted).
-- Authorization prompts repeat: Make sure you’re running the script under the same account that owns the destination calendar and has access to sources.
+### "Calendar not found" in email
+- Verify the Calendar ID is correct
+- Ensure the account running the script has access to the calendar
+- Check calendar sharing permissions
 
-## Potential enhancements
+### Duplicate events appearing
+- Usually caused by time changes in source events (see limitations)
+- Search destination for `Source Event ID:` to find and remove orphans
+- Consider narrowing the sync window
 
-- A cleanup/garbage-collection utility to remove orphaned events when times change
-- A fallback matching strategy that tolerates minor source edits (e.g., fuzzy match without time in the key)
-- Script Properties for storing config and support for multiple destination calendars
+### All-day events showing as timed
+- Source event must start at exactly 12:00 AM and end at 12:00 AM the next day
+- Check the source calendar's timezone settings
+
+### No email received
+- Verify `emails` array in `config.gs`
+- Check spam folder
+- Confirm MailApp quota isn't exhausted (Apps Script → Quotas)
+
+### Repeated authorization prompts
+- Run the script from the same account that owns/has access to all calendars
+- Re-authorize if permissions changed
+
+## Potential Enhancements
+
+- [ ] Garbage collection for orphaned events after time changes
+- [ ] Fuzzy matching to tolerate minor source edits
+- [ ] Script Properties for externalized configuration
+- [ ] Support for multiple destination calendars
+- [ ] Configurable prefix format
+
+## License
+
+MIT
